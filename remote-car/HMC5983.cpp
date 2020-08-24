@@ -23,15 +23,40 @@ https://www.farnell.com/datasheets/1802211.pdf
 #include "HMC5983.h"
 #include <Arduino.h>
 
-HMC5983::HMC5983() { m_Scale = 1; }
+HMC5983::HMC5983() {
+  m_Scale = 0.92;
+  flagInitedFilter = true;
+}
 
 MagnetometerRaw HMC5983::ReadRawAxis() {
   uint8_t *buffer = Read(DataRegisterBegin, 6);
   MagnetometerRaw raw = MagnetometerRaw();
+  std::reverse(buffer, buffer + 6);
+  memcpy(&raw, buffer, 6);
+  /*
   raw.XAxis = (buffer[0] << 8) | buffer[1];
   raw.ZAxis = (buffer[2] << 8) | buffer[3];
-  raw.YAxis = (buffer[4] << 8) | buffer[5];
+  raw.YAxis = ((buffer[4] << 8) | buffer[5]) + 810;
+  */
+  raw.XAxis -= 128;
+  raw.YAxis += 242;
+  // TODO: second order filter
+  if (flagInitedFilter) {
+    flagInitedFilter = false;
+  } else {
+    // filter
+    raw.XAxis = filter(raw.XAxis, last.XAxis);
+    raw.YAxis = filter(raw.YAxis, last.YAxis);
+  }
+  last.XAxis = raw.XAxis;
+  last.YAxis = raw.YAxis;
   return raw;
+}
+
+int16_t HMC5983::filter(int16_t raw, int16_t last) {
+  if (abs(raw - last) > 70)
+    return last;
+  return 0.9 * raw + 0.1 * last;
 }
 
 MagnetometerScaled HMC5983::ReadScaledAxis() {
@@ -44,13 +69,11 @@ MagnetometerScaled HMC5983::ReadScaledAxis() {
 }
 
 int HMC5983::SetScale(float gauss) {
-  Serial.println(gauss);
-  Serial.println(gauss == 1.30);
-  uint8_t regValue = 0x00;
+  uint8_t regValue = 0x01;
   if (gauss == 0.88) {
     regValue = 0x00;
     m_Scale = 0.73;
-  } else if (gauss == 1.30) {
+  } else if (gauss == 1.3) {
     regValue = 0x01;
     m_Scale = 0.92;
   } else if (gauss == 1.9) {
@@ -80,7 +103,11 @@ int HMC5983::SetScale(float gauss) {
   return 0;
 }
 
-int HMC5983::SetMeasurementMode(uint8_t mode) { Write(ModeRegister, mode); }
+int HMC5983::SetMeasurementMode(uint8_t mode) {
+  Write(ModeRegister, mode);
+  // 8 samples
+  Write(ConfigurationRegisterA, Samples_Averaged_8);
+}
 
 void HMC5983::Write(int address, int data) {
   Wire.beginTransmission(HMC5983_Address);

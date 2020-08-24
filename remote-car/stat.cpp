@@ -24,29 +24,39 @@ void Stat::calculate() {
                         (currentY - lastY) * (currentY - lastY)) /
                    duration;
 
-    if (currentMode = 0) {
-      // 绝对角度控制
-      float errorAng = targetAbsAng - (currentAbsAng - absAngFix);
-      float errorSpeed = targetSpeed - currentSpeed;
-      targetRightSpeed +=
-          duration * (K_speed * errorSpeed + K_abs * errorAng / 2);
-      targetLeftSpeed +=
-          duration * (K_speed * errorSpeed - K_abs * errorAng / 2);
+    // FIXME:
+    // 对向后的角度做处理(90~270)，另外我觉得并不需要从前端控制速度，而是通过偏转角大小来计算
+    if (currentMode == 0) {
+      // 绝对角度，PID控制
+      float errorAng = targetAbsAng - currentAbsAng;
+      float errorSpeed = targetSpeed;
+      targetRightSpeed = K_speed * errorSpeed + K_abs * errorAng / 2;
+      targetLeftSpeed = K_speed * errorSpeed - K_abs * errorAng / 2;
 
     } else if (currentMode == 1) {
-      // 相对角度控制
-      float errorSpeed = targetSpeed - currentSpeed;
-      targetRightSpeed +=
-          duration * (K_speed * errorSpeed + K_abs * targetAng / 2);
-      targetLeftSpeed +=
-          duration * (K_speed * errorSpeed - K_abs * targetAng / 2);
+      // 相对角度控制，直接输出
+      float errorSpeed = targetSpeed;
+      targetRightSpeed = (K_speed * errorSpeed + K_abs * targetAng / 2);
+      targetLeftSpeed = (K_speed * errorSpeed - K_abs * targetAng / 2);
+    }
+    // 速度限制
+    if (currentLeftSpeed > 25) {
+      currentLeftSpeed = 25;
+    }
+    if (currentRightSpeed > 25) {
+      currentRightSpeed = 25;
     }
 
     // 速度步进
+    /*
     currentLeftSpeed +=
         duration * K_step * (targetLeftSpeed - currentLeftSpeed);
     currentRightSpeed +=
         duration * K_step * (targetRightSpeed - currentRightSpeed);
+        */
+    // 没必要比例控制，直接给到就行
+    currentLeftSpeed = targetLeftSpeed;
+    currentRightSpeed = targetRightSpeed;
   } else {
     // 关闭电机
     currentLeftSpeed = 0;

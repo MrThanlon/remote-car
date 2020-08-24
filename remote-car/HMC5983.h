@@ -37,6 +37,11 @@ https://www.farnell.com/datasheets/1802211.pdf
 #define Measurement_SingleShot 0x01
 #define Measurement_Idle 0x03
 
+#define Samples_Averaged_1 0x9c
+#define Samples_Averaged_2 0b0c
+#define Samples_Averaged_4 0xdc
+#define Samples_Averaged_8 0xfc
+
 #define ErrorCode_1                                                            \
   "Entered scale was not valid, valid gauss values are: 0.88, 1.3, 1.9, 2.5, " \
   "4.0, 4.7, 5.6, 8.1"
@@ -49,9 +54,9 @@ struct MagnetometerScaled {
 };
 
 struct MagnetometerRaw {
-  int XAxis;
-  int YAxis;
-  int ZAxis;
+  int16_t YAxis;
+  int16_t ZAxis;
+  int16_t XAxis;
 };
 
 class HMC5983 {
@@ -65,12 +70,15 @@ public:
   int SetScale(float gauss);
 
   char *GetErrorText(int errorCode);
+  float m_Scale;
 
 protected:
   void Write(int address, int byte);
   uint8_t *Read(int address, int length);
+  int16_t filter(int16_t raw, int16_t last);
+  MagnetometerRaw last;
+  bool flagInitedFilter;
 
 private:
-  float m_Scale;
 };
 #endif

@@ -10,13 +10,13 @@ public:
   Stat();
   // PID参数
   // 绝对角度控制比例系数
-  float K_abs = 2;
+  float K_abs = (50 / 45);
   // 角速度控制比例系数
-  float K_ang = 2;
+  float K_ang = (50 / 45);
   // 速度控制比例系数
-  float K_speed = 2;
+  float K_speed = 1;
   // 速度控制步进比例系数
-  float K_step = 5;
+  float K_step = 1;
 
   // 上次的心跳包时刻
   unsigned long lastHeartbeat = millis();
@@ -42,7 +42,7 @@ public:
   float currentRightSpeed = 0;
 
   // 角度修正值
-  float absAngFix = 0;
+  double absAngFix = 0;
 
   // 当前角度，来自电子罗盘
   float currentAbsAng = 0;

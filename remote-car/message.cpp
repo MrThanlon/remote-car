@@ -78,7 +78,7 @@ bool Message::exec(Stat &stat) {
   switch (type) {
   case 0x78: {
     // 更新心跳包时间
-    stat.lastHeartbeat = micros();
+    stat.lastHeartbeat = millis();
     break;
   }
   case 0x9a: {
@@ -94,7 +94,11 @@ bool Message::exec(Stat &stat) {
     int16_t targetAbsAng = (data[2] << 8) | data[3];
     int16_t targetSpeed = (data[4] << 8) | data[5];
     stat.targetAbsAng = targetAbsAng / 10.0;
-    stat.targetSpeed = targetSpeed / 100.0;
+    stat.targetSpeed = targetSpeed / 100.0 / 2;
+    // 限制最大速度
+    if (stat.targetSpeed > 25) {
+      stat.targetSpeed = 25;
+    }
     stat.currentMode = 0;
     stat.lastUpdate = millis();
     break;
@@ -104,7 +108,10 @@ bool Message::exec(Stat &stat) {
     int16_t targetAng = (data[2] << 8) | data[3];
     int16_t targetSpeed = (data[4] << 8) | data[5];
     stat.targetAng = targetAng / 10.0;
-    stat.targetSpeed = targetSpeed / 100.0;
+    stat.targetSpeed = targetSpeed / 100.0 / 2;
+    if (stat.targetSpeed > 25) {
+      stat.targetSpeed = 25;
+    }
     stat.currentMode = 1;
     stat.lastUpdate = millis();
     break;
@@ -112,8 +119,9 @@ bool Message::exec(Stat &stat) {
   case 0x56: {
     int16_t targetLeftSpeed = ((int16_t)data[2] << 8) | data[3];
     int16_t targetRightSpeed = ((int16_t)data[4] << 8) | data[5];
-    stat.targetLeftSpeed = targetLeftSpeed / 100.0;
-    stat.targetRightSpeed = targetRightSpeed / 100.0;
+    // 多除以2是因为太快了
+    stat.targetLeftSpeed = targetLeftSpeed / 100.0 / 2;
+    stat.targetRightSpeed = targetRightSpeed / 100.0 / 2;
     stat.currentMode = 2;
     stat.lastUpdate = millis();
     break;

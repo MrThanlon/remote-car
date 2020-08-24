@@ -1,4 +1,4 @@
-#!/usr/bin/node
+#!/usr/bin/env node
 
 "use strict"
 
@@ -8,14 +8,17 @@ const Koa = require('koa')
 const koaStatic = require('koa-static')
 const koaMount = require('koa-mount')
 const websockify = require('koa-websocket')
+const child = require('child_process')
+const fs = require('fs')
 
-// 防止退出
+// Prevent exit
 process.on('uncaughtException', function (err) {
     console.error(err.stack);
     console.log("Node NOT Exiting...");
+    setTimeout(() => backend.kill(), 1000)
 });
 
-// tcp监听
+// TCP listen
 const tcpServer = new net.createServer()
 
 tcpServer.on("listening", function () {
@@ -29,9 +32,12 @@ let socketPoll = []
 tcpServer.on("connection", function (socket) {
     console.log(`[TCP] Connected from [${socket.remoteAddress}:${socket.remotePort}]`)
     socketPoll.push(socket)
+    socket.on("error", function (e) {
+        console.debug(`[TCP] Socket Error: `, e)
+    })
 
     socket.on("data", function (data) {
-        console.debug(`[TCP] received: ${data}`)
+        // console.debug(`[TCP] received: `, data)
         // 转发
         wsPool = wsPool.filter(v => {
             try {
@@ -41,7 +47,7 @@ tcpServer.on("connection", function (socket) {
                 return false
             }
         })
-        console.debug(`[TCP] transfered`)
+        // console.debug(`[TCP] transfered`)
     })
 })
 
@@ -74,7 +80,7 @@ setInterval(() => {
 
 // http+ws监听
 // 静态资源
-const staticFile = new koaStatic('./remote-car-fe/dist')
+const staticFile = new koaStatic(__dirname + '/remote-car-fe/dist')
 const staticServer = new Koa()
 staticServer.use(staticFile)
 const http = new Koa()
@@ -85,8 +91,8 @@ const ws = websockify(http)
 ws.ws.use((ctx, next) => {
     //ctx.websocket.send("Connected!")
     console.debug(`[WebSocket] connected from ${ctx.ip}`)
-    ctx.websocket.on("message", (message) => {
-        console.debug(`[WebSocket] received: ${message}`)
+    ctx.websocket.on("message", message => {
+        console.debug(`[WebSocket] received: `, message)
         // echo
         //ctx.websocket.send(message)
         // transfer
@@ -109,3 +115,93 @@ ws.listen(conf.httpPort)
 console.debug(`[HTTP] Server opened, port: ${conf.httpPort}`)
 
 // 子进程监听
+let lastPosUpdate = Date.now()
+if (fs.existsSync(__dirname + '/backend/backend')) {
+    //文件存在，运行
+    let backend = child.spawn(__dirname + '/backend/backend')
+    console.debug(`[GPIO] Running...`)
+    backend.stdout.on('data', (data) => {
+        const s = data.toString()
+        console.debug(`[GPIO] receive:`, s)
+        // 解析
+        const pos = /^(\-?\d+\.?\d+)\s(\-?\d+\.?\d+)/.exec(s)
+        if (pos) {
+            lastPosUpdate = Date.now()
+            const x = Math.round(pos[1] * 100)
+            const y = Math.round(pos[2] * 100)
+            const id = randomID()
+            let b = [0x99, 0xbc, x >> 8, x & 0xff, y >> 8, y & 0xff, id >> 8, id & 0xff]
+            b.push(b.reduce((pre, cur) => pre + cur, 0) & 0xff)
+            // 发送
+            wsPool = wsPool.filter(v => {
+                try {
+                    v.websocket.send(Buffer.from(b))
+                    return true
+                } catch (e) {
+                    return false
+                }
+            })
+        }
+    })
+    backend.on('close', () => {
+        // 重新拉起
+        lastPosUpdate = Date.now()
+        console.debug(`[GPIO] exited, reopening...`)
+        backend = child.spawn('./backend/backend')
+        console.debug(`[GPIO] reopened`)
+        backend.stdout.on('data', (data) => {
+            const s = data.toString()
+            console.debug(`[GPIO] receive:`, s)
+            // 解析
+            const pos = /^(\-?\d+\.?\d+)\s(\-?\d+\.?\d+)/.exec(s)
+            if (pos) {
+                const x = Math.round(pos[1] * 300 + 150)
+                const y = Math.round(pos[2] * 300 + 150)
+                const id = randomID()
+                let b = [0x99, 0xbc, x >> 8, x & 0xff, y >> 8, y & 0xff, id >> 8, id & 0xff]
+                b.push(b.reduce((pre, cur) => pre + cur, 0) & 0xff)
+                // 发送
+                wsPool = wsPool.filter(v => {
+                    try {
+                        v.websocket.send(Buffer.from(b))
+                        return true
+                    } catch (e) {
+                        return false
+                    }
+                })
+            }
+        })
+    })
+    // 当500毫秒内没收到数据的时候转一下/重新拉起
+
+    setInterval(() => {
+        if (socketPoll.length > 0 && Date.now() - lastPosUpdate > 2000) {
+
+            console.debug(`[GPIO] send rotate`)
+            socketPoll = socketPoll.filter(v => {
+                try {
+                    v.write(Buffer.from([0x99, 0x34, 0x01, 0x2c, 0x00, 0x00, 0x00, 0x00, 0xfa]))
+                    return true
+                }
+                catch (e) {
+                    return false
+                }
+            })
+            setTimeout(() => {
+                socketPoll = socketPoll.filter(v => {
+                    try {
+                        v.write(Buffer.from([0x99, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 205]))
+                        return true
+                    }
+                    catch (e) {
+                        return false
+                    }
+                })
+            }, 1000)
+            lastPosUpdate = Date.now()
+
+            //console.debug(`[GPIO] exited, reopening...`)
+            //backend.kill()
+        }
+    }, 2000)
+}

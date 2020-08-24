@@ -1,0 +1,9 @@
+#!/usr/bin/env python
+
+import time
+import sys
+
+for i in range(5):
+    time.sleep(1)
+    print("12.123 -38.2234 10 0 389 18 1839")
+    sys.stdout.flush()
